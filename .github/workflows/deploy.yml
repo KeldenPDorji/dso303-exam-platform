@@ -24,6 +24,10 @@ env:
   TF_VAR_ses_sender_email: ${{ vars.SES_SENDER_EMAIL }}
   TF_VAR_ses_verified_recipients: ${{ vars.SES_VERIFIED_RECIPIENTS }}
   TF_VAR_alarm_email: ${{ vars.ALARM_EMAIL }}
+  # Optional overrides (AWS Free plan accounts: db.t4g.micro, 1 day, no RDS Proxy).
+  TF_VAR_db_instance_class: ${{ vars.DB_INSTANCE_CLASS || 'db.t4g.small' }}
+  TF_VAR_db_backup_retention_days: ${{ vars.DB_BACKUP_RETENTION_DAYS || '7' }}
+  TF_VAR_enable_rds_proxy: ${{ vars.ENABLE_RDS_PROXY || 'true' }}
   TF_IN_AUTOMATION: "true"
   TF_INPUT: "false"
   TERRAFORM_VERSION: "1.13.3"

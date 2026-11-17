@@ -36,13 +36,23 @@ def _load_credentials(force=False):
     return _creds
 
 
+def _tls_context():
+    """Verified TLS. RDS Proxy presents a publicly trusted certificate; a direct RDS
+    connection presents an RDS CA certificate, so the RDS CA bundle is added when present."""
+    context = ssl.create_default_context()
+    bundle = os.environ.get("DB_CA_BUNDLE")
+    if bundle and os.path.exists(bundle):
+        context.load_verify_locations(cafile=bundle)
+    return context
+
+
 def _connect():
     use_tls = os.environ.get("DB_TLS", "true") != "false"
     kwargs = {
         "host": os.environ["DB_HOST"],
         "port": int(os.environ.get("DB_PORT", "5432")),
         "database": os.environ.get("DB_NAME", "exams"),
-        "ssl_context": ssl.create_default_context() if use_tls else None,
+        "ssl_context": _tls_context() if use_tls else None,
         "timeout": 10,
         "application_name": os.environ.get("AWS_LAMBDA_FUNCTION_NAME", "exam-platform"),
     }

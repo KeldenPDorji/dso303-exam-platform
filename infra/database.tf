@@ -71,6 +71,8 @@ resource "aws_db_instance" "main" {
 # ---------------------------------------------------------------- RDS Proxy
 # Pools and multiplexes connections from thousands of concurrent Lambda executions,
 # and keeps client connections open during a Multi-AZ failover.
+# Optional: AWS Free plan accounts cannot create RDS Proxy (enable_rds_proxy = false),
+# in which case Lambda connects to the database endpoint directly over TLS.
 
 data "aws_iam_policy_document" "rds_proxy_assume" {
   statement {
@@ -83,6 +85,7 @@ data "aws_iam_policy_document" "rds_proxy_assume" {
 }
 
 resource "aws_iam_role" "rds_proxy" {
+  count              = var.enable_rds_proxy ? 1 : 0
   name               = "${local.name}-rds-proxy"
   assume_role_policy = data.aws_iam_policy_document.rds_proxy_assume.json
 }
@@ -105,15 +108,17 @@ data "aws_iam_policy_document" "rds_proxy" {
 }
 
 resource "aws_iam_role_policy" "rds_proxy" {
+  count  = var.enable_rds_proxy ? 1 : 0
   name   = "read-db-secret"
-  role   = aws_iam_role.rds_proxy.id
+  role   = aws_iam_role.rds_proxy[0].id
   policy = data.aws_iam_policy_document.rds_proxy.json
 }
 
 resource "aws_db_proxy" "main" {
+  count                  = var.enable_rds_proxy ? 1 : 0
   name                   = "${local.name}-proxy"
   engine_family          = "POSTGRESQL"
-  role_arn               = aws_iam_role.rds_proxy.arn
+  role_arn               = aws_iam_role.rds_proxy[0].arn
   vpc_subnet_ids         = aws_subnet.app[*].id
   vpc_security_group_ids = [aws_security_group.proxy.id]
   require_tls            = true
@@ -130,7 +135,8 @@ resource "aws_db_proxy" "main" {
 }
 
 resource "aws_db_proxy_default_target_group" "main" {
-  db_proxy_name = aws_db_proxy.main.name
+  count         = var.enable_rds_proxy ? 1 : 0
+  db_proxy_name = aws_db_proxy.main[0].name
 
   connection_pool_config {
     max_connections_percent      = 90
@@ -140,7 +146,13 @@ resource "aws_db_proxy_default_target_group" "main" {
 }
 
 resource "aws_db_proxy_target" "main" {
-  db_proxy_name          = aws_db_proxy.main.name
-  target_group_name      = aws_db_proxy_default_target_group.main.name
+  count                  = var.enable_rds_proxy ? 1 : 0
+  db_proxy_name          = aws_db_proxy.main[0].name
+  target_group_name      = aws_db_proxy_default_target_group.main[0].name
   db_instance_identifier = aws_db_instance.main.identifier
+}
+
+locals {
+  # What Lambda connects to: the proxy endpoint, or the database itself when the proxy is disabled.
+  db_endpoint = var.enable_rds_proxy ? aws_db_proxy.main[0].endpoint : aws_db_instance.main.address
 }

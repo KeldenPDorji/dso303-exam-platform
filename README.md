@@ -88,6 +88,9 @@ Repository → **Settings → Secrets and variables → Actions → Variables**:
 
 Then **Settings → Environments → New environment → `production`**.
 
+On an **AWS Free plan** account also set `DB_INSTANCE_CLASS=db.t4g.micro`, `DB_BACKUP_RETENTION_DAYS=1` and
+`ENABLE_RDS_PROXY=false`. The Free plan blocks larger RDS instances, longer backup retention and RDS Proxy; Multi-AZ is allowed.
+
 ### 3. Push to `main`
 
 ```bash

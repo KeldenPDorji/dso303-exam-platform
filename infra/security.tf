@@ -81,6 +81,27 @@ resource "aws_vpc_security_group_egress_rule" "proxy_https" {
   to_port           = 443
 }
 
+# Without RDS Proxy (Free plan accounts), Lambda reaches the database directly.
+resource "aws_vpc_security_group_egress_rule" "lambda_to_db" {
+  count                        = var.enable_rds_proxy ? 0 : 1
+  security_group_id            = aws_security_group.lambda.id
+  description                  = "PostgreSQL to the database (no RDS Proxy)"
+  referenced_security_group_id = aws_security_group.db.id
+  ip_protocol                  = "tcp"
+  from_port                    = 5432
+  to_port                      = 5432
+}
+
+resource "aws_vpc_security_group_ingress_rule" "db_from_lambda" {
+  count                        = var.enable_rds_proxy ? 0 : 1
+  security_group_id            = aws_security_group.db.id
+  description                  = "PostgreSQL from Lambda (no RDS Proxy)"
+  referenced_security_group_id = aws_security_group.lambda.id
+  ip_protocol                  = "tcp"
+  from_port                    = 5432
+  to_port                      = 5432
+}
+
 resource "aws_vpc_security_group_ingress_rule" "db_from_proxy" {
   security_group_id            = aws_security_group.db.id
   description                  = "PostgreSQL from RDS Proxy only"

@@ -29,9 +29,15 @@ variable "single_nat_gateway" {
 }
 
 variable "db_instance_class" {
-  description = "RDS instance class. Production sizing for exam week: db.r6g.large."
+  description = "RDS instance class. Production sizing for exam week: db.r6g.large. AWS Free plan accounts: db.t4g.micro only."
   type        = string
   default     = "db.t4g.small"
+}
+
+variable "enable_rds_proxy" {
+  description = "Put RDS Proxy between Lambda and the database. AWS Free plan accounts cannot create RDS Proxy: set false there."
+  type        = bool
+  default     = true
 }
 
 variable "db_allocated_storage" {
@@ -41,7 +47,7 @@ variable "db_allocated_storage" {
 }
 
 variable "db_backup_retention_days" {
-  description = "RDS automated backup / point-in-time-restore window. Production: 35."
+  description = "RDS automated backup / point-in-time-restore window. Production: 35. AWS Free plan accounts: max 1."
   type        = number
   default     = 7
 }

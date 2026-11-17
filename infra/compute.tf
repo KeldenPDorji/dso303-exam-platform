@@ -28,7 +28,8 @@ resource "aws_lambda_layer_version" "deps" {
 locals {
   lambda_env_common = {
     DB_SECRET_ARN     = aws_db_instance.main.master_user_secret[0].secret_arn
-    DB_HOST           = aws_db_proxy.main.endpoint
+    DB_HOST           = local.db_endpoint
+    DB_CA_BUNDLE      = "/opt/rds-global-bundle.pem" # RDS CA, shipped in the dependency layer by scripts/build.sh
     DB_NAME           = aws_db_instance.main.db_name
     UPLOAD_BUCKET     = aws_s3_bucket.uploads.bucket
     MARKING_QUEUE_URL = aws_sqs_queue.main["marking"].url
