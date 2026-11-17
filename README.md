@@ -69,7 +69,7 @@ Creates the Terraform state bucket and the IAM role that GitHub Actions assumes 
 ```bash
 cd infra/bootstrap
 terraform init
-terraform apply -var 'github_repository=<your-github-user>/<repo-name>'
+terraform apply -var 'github_repository=<your-github-user>/<repo-name>' -var "github_subject_prefix=$(gh api repos/<your-github-user>/<repo-name>/actions/oidc/customization/sub --jq .sub_claim_prefix)"
 # If the account already has a GitHub OIDC provider: add -var create_oidc_provider=false
 ```
 

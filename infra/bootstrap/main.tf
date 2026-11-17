@@ -28,6 +28,12 @@ variable "github_repository" {
   type        = string
 }
 
+variable "github_subject_prefix" {
+  description = "Extra OIDC sub prefix for repos using GitHub's immutable subject format (repo:<owner>@<owner-id>/<repo>@<repo-id>). Read it with: gh api repos/<owner>/<repo>/actions/oidc/customization/sub --jq .sub_claim_prefix"
+  type        = string
+  default     = ""
+}
+
 variable "create_oidc_provider" {
   description = "Set false if this AWS account already has the token.actions.githubusercontent.com provider."
   type        = bool
@@ -89,6 +95,14 @@ data "aws_iam_openid_connect_provider" "github" {
 
 locals {
   oidc_provider_arn = var.create_oidc_provider ? aws_iam_openid_connect_provider.github[0].arn : data.aws_iam_openid_connect_provider.github[0].arn
+  # Classic subject (repo:owner/name) plus, when given, the immutable one (repo:owner@id/name@id).
+  github_subjects = flatten([
+    for prefix in distinct(compact(["repo:${var.github_repository}", var.github_subject_prefix])) : [
+      "${prefix}:ref:refs/heads/main",
+      "${prefix}:environment:production",
+      "${prefix}:pull_request",
+    ]
+  ])
 }
 
 data "aws_iam_policy_document" "github_assume" {
@@ -107,11 +121,7 @@ data "aws_iam_policy_document" "github_assume" {
     condition {
       test     = "StringLike"
       variable = "token.actions.githubusercontent.com:sub"
-      values = [
-        "repo:${var.github_repository}:ref:refs/heads/main",
-        "repo:${var.github_repository}:environment:production",
-        "repo:${var.github_repository}:pull_request",
-      ]
+      values   = local.github_subjects
     }
   }
 }
