@@ -1,0 +1,22 @@
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+crash.log
+infra/.build/
+infra/terraform.tfvars
+infra/backend.hcl
+
+# Build output
+backend/build/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Generated at deploy time
+frontend/config.js
+
+# Local files
+.DS_Store
+*.local

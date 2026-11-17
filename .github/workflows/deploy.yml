@@ -1,0 +1,132 @@
+# CI/CD: pull request -> test + plan; push to main -> test + deploy everything.
+# AWS access uses GitHub OIDC (short-lived role credentials). No AWS keys are stored in GitHub.
+name: CI/CD
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  id-token: write # required for OIDC
+  contents: read
+
+concurrency:
+  group: exam-platform-${{ github.ref }}
+  cancel-in-progress: false # never cancel a half-finished terraform apply
+
+env:
+  AWS_REGION: ${{ vars.AWS_REGION }}
+  TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
+  TF_VAR_aws_region: ${{ vars.AWS_REGION }}
+  TF_VAR_ses_sender_email: ${{ vars.SES_SENDER_EMAIL }}
+  TF_VAR_ses_verified_recipients: ${{ vars.SES_VERIFIED_RECIPIENTS }}
+  TF_VAR_alarm_email: ${{ vars.ALARM_EMAIL }}
+  TF_IN_AUTOMATION: "true"
+  TF_INPUT: "false"
+  TERRAFORM_VERSION: "1.13.3"
+
+jobs:
+  test:
+    name: Unit + integration tests, Terraform validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install test dependencies
+        run: pip install -r backend/requirements.txt -r backend/requirements-dev.txt
+
+      - name: Unit tests
+        run: python -m pytest backend/tests -q
+
+      - name: Integration tests (real PostgreSQL)
+        run: |
+          # ubuntu-latest ships PostgreSQL binaries; install them only if missing
+          ls -d /usr/lib/postgresql/*/bin >/dev/null 2>&1 || (sudo apt-get update -qq && sudo apt-get install -y -qq postgresql)
+          export PATH="$(ls -d /usr/lib/postgresql/*/bin | sort -V | tail -1):$PATH"
+          ./scripts/integration-test.sh
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+
+      - name: Terraform fmt + validate
+        run: |
+          terraform fmt -check -recursive infra
+          terraform -chdir=infra init -backend=false
+          terraform -chdir=infra validate
+
+  plan:
+    name: Terraform plan (pull requests)
+    if: github.event_name == 'pull_request'
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+      - run: ./scripts/build.sh
+      - name: Terraform plan
+        run: |
+          terraform -chdir=infra init -backend-config="bucket=$TF_STATE_BUCKET" \
+            -backend-config="key=exam-platform/prod.tfstate" -backend-config="region=$AWS_REGION" \
+            -backend-config="use_lockfile=true" -backend-config="encrypt=true"
+          terraform -chdir=infra plan -no-color
+
+  deploy:
+    name: Deploy to AWS (push to main)
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    needs: test
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+          terraform_wrapper: false # so `terraform output -raw` returns clean values
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Build Lambda dependency layer
+        run: ./scripts/build.sh
+
+      - name: Terraform apply (infrastructure + Lambda code)
+        run: |
+          terraform -chdir=infra init -backend-config="bucket=$TF_STATE_BUCKET" \
+            -backend-config="key=exam-platform/prod.tfstate" -backend-config="region=$AWS_REGION" \
+            -backend-config="use_lockfile=true" -backend-config="encrypt=true"
+          terraform -chdir=infra apply -auto-approve
+
+      - name: Deploy frontend (S3 sync + CloudFront invalidation)
+        run: ./scripts/deploy-frontend.sh
+
+      - name: Database migration (schema + demo seed)
+        run: ./scripts/migrate.sh
+
+      - name: Smoke test through CloudFront
+        run: ./scripts/smoke-test.sh
+
+      - name: Summary
+        run: |
+          echo "### Deployed :rocket:" >> "$GITHUB_STEP_SUMMARY"
+          echo "Site: $(./scripts/tf-outputs.sh site_url)" >> "$GITHUB_STEP_SUMMARY"
