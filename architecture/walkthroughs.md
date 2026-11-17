@@ -7,6 +7,10 @@ Both flows are implemented in the code and covered by the integration test
 
 ## Walkthrough 1: a student opens an exam and answers autosave
 
+Evidence: lab simulation [cal-01](../evidence/cal-01-walkthrough1-exam-autosave.png) (HTTP 200), the same flow with AZ-A down
+[cal-03](../evidence/cal-03-az-a-outage.png) (served by AZ-B), and on AWS: autosave confirmed [aws-02](../evidence/aws-02-exam-autosave.png),
+plus the API reaching the Multi-AZ database [aws-03](../evidence/aws-03-frontend-api-multi-az-db.png).
+
 ```mermaid
 sequenceDiagram
     autonumber
@@ -68,6 +72,10 @@ Observability: API Gateway access log (request id, user sub, latency), X-Ray tra
 ---
 
 ## Walkthrough 2: a student uploads a 40 MB assignment and the tutor is notified
+
+Evidence: lab simulation [cal-02](../evidence/cal-02-walkthrough2-upload-notify.png) (HTTP 202), and on AWS
+[aws-04](../evidence/aws-04-upload-async-processing.png): the 41,943,049-byte object in S3, the processor's `RECEIVED` log, and the
+"New submission" (tutor) and "Submission receipt" (student) emails sent by the notifier.
 
 ```mermaid
 sequenceDiagram
