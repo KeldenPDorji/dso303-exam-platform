@@ -1,3 +1,5 @@
 # Runtime dependencies packaged into the Lambda layer (boto3 is provided by the Lambda runtime).
 # pg8000 is pure Python, so the layer builds the same on macOS, Windows or Linux CI.
-pg8000==1.31.2
+# scramp is pinned with it: pg8000 < 1.31.6 calls an API removed in scramp 1.5 (breaks TLS + SCRAM logins).
+pg8000==1.31.6
+scramp==1.5.0
